@@ -1,5 +1,5 @@
 # RunPod Dockerfile for IndexTTS2 Voice Cloning
-# Uses uv package manager as recommended by IndexTTS2 documentation
+# Download as zip instead of git clone to avoid GitHub rate limiting on Actions
 
 FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 
@@ -16,14 +16,13 @@ RUN apt-get update && apt-get install -y \
     python3.10 \
     python3-pip \
     python3.10-venv \
-    git \
-    git-lfs \
     libsndfile1 \
     ffmpeg \
     espeak-ng \
     build-essential \
     wget \
     curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Make python3.10 the default
@@ -34,17 +33,14 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
 RUN pip install --upgrade pip
 RUN pip install uv
 
-# Initialize git-lfs
-RUN git lfs install
-
-# Clone IndexTTS2 repository with git-lfs
-RUN git clone https://github.com/index-tts/index-tts.git /app/index-tts
+# Download IndexTTS2 as zip (avoids git rate limiting)
+RUN wget -O index-tts.zip https://github.com/index-tts/index-tts/archive/refs/heads/main.zip \
+    && unzip index-tts.zip \
+    && mv index-tts-main /app/index-tts \
+    && rm index-tts.zip
 
 # Change to index-tts directory
 WORKDIR /app/index-tts
-
-# Pull LFS files
-RUN git lfs pull
 
 # Create virtual environment and install dependencies using uv
 RUN uv venv .venv --python 3.10
