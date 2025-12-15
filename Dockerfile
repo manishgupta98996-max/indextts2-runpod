@@ -1,6 +1,4 @@
 # RunPod Dockerfile for Coqui XTTS Voice Cloning
-# Using XTTS-v2 which installs easily via pip and provides high-quality voice cloning
-
 FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 
 WORKDIR /app
@@ -9,40 +7,32 @@ WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 ENV PYTHONUNBUFFERED=1
+ENV COQUI_TOS_AGREED=1
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    git \
     libsndfile1 \
     ffmpeg \
-    build-essential \
-    wget \
-    curl \
     espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and handler
-COPY requirements.txt .
-COPY handler.py .
+# Upgrade pip
+RUN pip install --upgrade pip
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install core dependencies first (without version pinning for compatibility)
+RUN pip install --no-cache-dir runpod requests soundfile
 
-# Install Coqui TTS (includes XTTS-v2)
+# Install Coqui TTS
 RUN pip install --no-cache-dir TTS
 
-# Create model cache directories
-RUN mkdir -p /model_cache
+# Copy handler
+COPY handler.py .
 
-# Pre-download XTTS-v2 model to avoid cold start delays
+# Pre-download XTTS-v2 model
 RUN python -c "from TTS.api import TTS; TTS('tts_models/multilingual/multi-dataset/xtts_v2')"
 
-# Environment variables
-ENV HF_HOME=/model_cache
-ENV COQUI_TOS_AGREED=1
-
-# Expose port for health checks
+# Expose port
 EXPOSE 8000
 
-# Start the RunPod handler
+# Start handler
 CMD ["python", "-u", "handler.py"]
