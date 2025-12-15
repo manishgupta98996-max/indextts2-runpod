@@ -1,6 +1,6 @@
 """
-RunPod Serverless Handler for IndexTTS2 Voice Cloning
-This handler processes incoming requests and generates voice-cloned audio.
+RunPod Serverless Handler for Coqui XTTS-v2 Voice Cloning
+This handler processes incoming requests and generates voice-cloned audio using XTTS-v2.
 """
 
 import runpod
@@ -10,43 +10,27 @@ import tempfile
 import requests
 import traceback
 import base64
-from indextts.infer_v2 import IndexTTS2
+from TTS.api import TTS
 
 # Global model instance (loaded once, reused across requests)
 model = None
 
-# Model directories
-MODEL_DIR = os.getenv("MODEL_DIR", "/model_cache")
-CHECKPOINT_DIR = os.getenv("CHECKPOINT_DIR", "/checkpoints")
-
-
 def load_model():
-    """Load the IndexTTS2 model once at startup"""
+    """Load the XTTS-v2 model once at startup"""
     global model
     
     if model is not None:
         print("Model already loaded, skipping...")
         return
     
-    print("🚀 Loading IndexTTS2 model...")
+    print("🚀 Loading Coqui XTTS-v2 model...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"📱 Using device: {device}")
     
     try:
-        config_path = os.path.join(CHECKPOINT_DIR, "config.yaml")
-        
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Config file not found at {config_path}")
-        
-        model = IndexTTS2(
-            cfg_path=config_path,
-            model_dir=CHECKPOINT_DIR,
-            use_fp16=True,  # Faster inference with minimal quality loss
-            use_cuda_kernel=False,
-            use_deepspeed=False
-        )
-        
-        print("✅ IndexTTS2 model loaded successfully!")
+        # Load XTTS-v2 model
+        model = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
+        print("✅ XTTS-v2 model loaded successfully!")
         
     except Exception as e:
         print(f"❌ Model load error: {e}")
@@ -73,7 +57,8 @@ def handler(job):
     Expected input format:
     {
         "text": "Text to generate speech for",
-        "reference_audio_url": "https://example.com/reference.wav"
+        "reference_audio_url": "https://example.com/reference.wav",
+        "language": "en" (optional, defaults to "en")
     }
     
     Returns:
@@ -89,6 +74,7 @@ def handler(job):
         # Extract parameters
         text = job_input.get("text")
         reference_audio_url = job_input.get("reference_audio_url")
+        language = job_input.get("language", "en")
         
         # Validate inputs
         if not text:
@@ -115,13 +101,13 @@ def handler(job):
             output_path = output_file.name
         
         try:
-            # Generate speech with IndexTTS2
-            print("🎵 Running IndexTTS2 inference...")
-            model.infer(
-                spk_audio_prompt=ref_audio_path,
+            # Generate speech with XTTS-v2
+            print(f"🎵 Running XTTS-v2 inference (language: {language})...")
+            model.tts_to_file(
                 text=text,
-                output_path=output_path,
-                verbose=True
+                speaker_wav=ref_audio_path,
+                language=language,
+                file_path=output_path
             )
             
             # Read generated audio
@@ -140,7 +126,8 @@ def handler(job):
                 "audio_base64": audio_base64,
                 "generation_time": generation_time,
                 "audio_size_bytes": len(audio_bytes),
-                "text_length": len(text)
+                "text_length": len(text),
+                "language": language
             }
             
         finally:
