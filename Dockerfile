@@ -4,7 +4,9 @@ FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (non-interactive to avoid tzdata prompt)
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
 RUN apt-get update && apt-get install -y \
     git \
     git-lfs \
@@ -34,10 +36,10 @@ RUN mkdir -p /model_cache /checkpoints
 # This happens at build time to avoid cold starts
 RUN python -c "from huggingface_hub import snapshot_download; \
     snapshot_download( \
-        repo_id='IndexTeam/IndexTTS-2', \
-        cache_dir='/model_cache', \
-        local_dir='/checkpoints', \
-        local_dir_use_symlinks=False \
+    repo_id='IndexTeam/IndexTTS-2', \
+    cache_dir='/model_cache', \
+    local_dir='/checkpoints', \
+    local_dir_use_symlinks=False \
     )"
 
 # Copy handler code
