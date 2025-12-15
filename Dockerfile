@@ -4,9 +4,12 @@ FROM pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (non-interactive to avoid tzdata prompt)
+# Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     git-lfs \
@@ -15,25 +18,26 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     wget \
     curl \
+    espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 # Initialize git-lfs
 RUN git lfs install
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Install uv (fast Python package manager)
+RUN pip install --no-cache-dir uv
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Clone IndexTTS2 repository
+RUN git clone https://github.com/index-tts/index-tts.git /app/indextts
 
-# Install IndexTTS2 from GitHub
-RUN pip install --no-cache-dir git+https://github.com/index-tts/index-tts.git
+# Install IndexTTS2 dependencies using uv
+WORKDIR /app/indextts
+RUN uv pip install --system -e .
 
-# Create model cache directory
+# Create model cache directories
 RUN mkdir -p /model_cache /checkpoints
 
-# Download IndexTTS2 model weights from Hugging Face
-# This happens at build time to avoid cold starts
+# Download IndexTTS2 model weights from Hugging Face at build time
 RUN python -c "from huggingface_hub import snapshot_download; \
     snapshot_download( \
     repo_id='IndexTeam/IndexTTS-2', \
@@ -43,15 +47,15 @@ RUN python -c "from huggingface_hub import snapshot_download; \
     )"
 
 # Copy handler code
+WORKDIR /app
 COPY handler.py .
 
-# Expose port for health checks (RunPod expects this)
-EXPOSE 8000
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
+# Environment variables
 ENV MODEL_DIR=/model_cache
 ENV CHECKPOINT_DIR=/checkpoints
+
+# Expose port for health checks
+EXPOSE 8000
 
 # Start the RunPod handler
 CMD ["python", "-u", "handler.py"]
